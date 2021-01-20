@@ -2162,6 +2162,7 @@ final class SyncEngine
 		// rename the local item if it is unsynced and there is a new version of it on OneDrive
 		string oldPath;
 		if (cached && item.eTag != oldItem.eTag) {
+			log.vlog("[----------]");
 			// Is the item in the local database
 			if (itemdb.idInLocalDatabase(item.driveId, item.id)){
 				log.vdebug("OneDrive item ID is present in local database");
@@ -2176,12 +2177,13 @@ final class SyncEngine
 						item.mtime.fracSecs = Duration.zero;
 
 						// debug the output of time comparison
-						log.vdebug("[--] oldPath = ", oldPath); // print file path (oldPath)
-						log.vdebug("localModifiedTime (local file): ", localModifiedTime);
-						log.vdebug("item.mtime (OneDrive item):     ", item.mtime);
+						log.log("[--] oldPath = ", oldPath); // print file path (oldPath)
+						log.log("localModifiedTime (local file): ", localModifiedTime, "(", localModifiedTime.fracSecs, ")");
+						log.log("item.mtime (OneDrive item):     ", item.mtime, "(", item.mtime.fracSecs, ")");
 
 						// Compare file on disk modified time with modified time provided by OneDrive API
 						if (localModifiedTime >= item.mtime) {
+							log.log("-- local modified-time >= item.mtime");
 							// local file is newer or has the same time than the item on OneDrive
 							log.vdebug("Skipping OneDrive change as this is determined to be unwanted due to local item modified time being newer or equal to item modified time from OneDrive");
 							// no local rename
@@ -2195,7 +2197,7 @@ final class SyncEngine
 							return;
 						} else {
 							// remote file is newer than local item
-							log.vdebug("[--] Local file last-modified time is < item.mtime --> conflict?");
+							log.log("[--] Local file last-modified time is < item.mtime --> conflict?");
 							log.vlog("Remote item modified time is newer based on UTC time conversion"); // correct message, remote item is newer
 							auto ext = extension(oldPath);
 							auto newPath = path.chomp(ext) ~ "-" ~ deviceName ~ ext;
@@ -2892,7 +2894,7 @@ final class SyncEngine
 		Item item;
 		// For each unique OneDrive driveID we know about
 		foreach (driveId; driveIDsArray) {
-			log.vdebug("Processing DB entries for this driveId: ", driveId);
+			log.log("-- Processing DB entries for this driveId: ", driveId);
 			// Database scan of every item in DB for the given driveId based on the root parent for that drive
 			if ((syncBusinessFolders) && (driveId != defaultDriveId)) {
 				// There could be multiple shared folders all from this same driveId
@@ -2903,7 +2905,7 @@ final class SyncEngine
 			} else {
 				if (itemdb.selectByPath(path, driveId, item)) {
 					// Does it still exist on disk in the location the DB thinks it is
-					uploadDifferences(item);
+					uploadDifferences(item); // this function is called (once)
 				}
 			}
 		}
@@ -3316,12 +3318,13 @@ final class SyncEngine
 					localModifiedTime.fracSecs = Duration.zero;
 
 					if (localModifiedTime != itemModifiedTime) {
-						log.vlog("The file last modified time has changed");
+						log.log("-- file: ", path);
+						log.log("The file last modified time has changed");
 						string eTag = item.eTag;
 
 						// perform file hash tests - has the content of the file changed?
 						if (!testFileHash(path, item)) {
-							log.vlog("The file content has changed");
+							log.log("The file content has changed");
 							write("Uploading modified file ", path, " ... ");
 							JSONValue response;
 
@@ -3332,6 +3335,7 @@ final class SyncEngine
 								// To solve 'Multiple versions of file shown on website after single upload' (https://github.com/abraunegg/onedrive/issues/2)
 								// check what 'account type' this is as this issue only affects OneDrive Business so we need some extra logic here
 								if (accountType == "personal"){
+									log.log("personal");
 									// Original file upload logic
 									if (thisFileSize <= thresholdFileSize) {
 										try {
@@ -4766,7 +4770,7 @@ final class SyncEngine
 										// OneDrive Business account modified file upload handling
 										if (accountType == "business"){
 											// OneDrive Business Account - always use a session to upload
-											writeln("");
+											writeln("--");
 											try {
 												response = session.upload(path, parent.driveId, parent.id, baseName(path), fileDetailsFromOneDrive["eTag"].str);
 											} catch (OneDriveException e) {
